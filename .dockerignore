@@ -1,0 +1,11 @@
+node_modules
+dist
+.env
+.env.*
+data
+*.log
+.DS_Store
+README.md
+docker-compose*.yml
+*.remote.env
+test

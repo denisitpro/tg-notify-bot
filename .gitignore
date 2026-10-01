@@ -1,17 +1,14 @@
-# Secrets and keys - NEVER commit
-keys/
-fee-payer.json
-*.json
-
-# Local config overrides
-config/kora.toml
-
-# Environment
-.env
-.env.local
-
-# Docker / build
-*.log
-
-# Dependencies (do not commit installed packages)
 node_modules/
+dist/
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+.env
+.env.*
+*.remote.env
+data/
+*.log
+.DS_Store
+
+# Keep the example env template in git (must come AFTER the .env.* rule above,
+# otherwise .env.* would re-ignore it — later patterns win within a file).
+!.env.example

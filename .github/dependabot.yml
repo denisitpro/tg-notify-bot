@@ -1,0 +1,16 @@
+# Dependabot — weekly dependency scans.
+#   - npm: the bot's Node app (/)
+#   - github-actions: the action versions pinned in .github/workflows
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10

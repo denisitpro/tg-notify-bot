@@ -1,0 +1,21 @@
+# Compose for the Kora monitor bot (push-only Telegram notifier).
+#
+# ─── Env ──────────────────────────────────────────────────────────────────────
+#   Copy `.env.example` → `.env` next to this file.
+#   Required: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID. Everything else has a safe
+#   default baked into the image — no config files, no host paths/volumes.
+#
+# ─── Run ──────────────────────────────────────────────────────────────────────
+#   docker compose up -d --build
+#
+# Outbound only (Solana RPC + Telegram API) — no host networking needed.
+# State (last-seen signatures) lives inside the container only and does NOT
+# survive container recreation — accepted tradeoff for a zero-volume setup.
+
+services:
+  kora-monitor-bot:
+    build: .
+    image: denisitpro/tg-bot-kora:latest
+    restart: unless-stopped
+    env_file:
+      - .env
