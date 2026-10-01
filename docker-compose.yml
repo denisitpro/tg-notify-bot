@@ -6,6 +6,7 @@
 #   default baked into the image — no config files, no host paths/volumes.
 #
 # ─── Run ──────────────────────────────────────────────────────────────────────
+#   export NODE_VERSION=$(cat version.txt)
 #   docker compose up -d --build
 #
 # Outbound only (Solana RPC + Telegram API) — no host networking needed.
@@ -14,7 +15,11 @@
 
 services:
   kora-monitor-bot:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NODE_VERSION: ${NODE_VERSION:?NODE_VERSION is required — export NODE_VERSION=$(cat version.txt)}
     image: denisitpro/tg-notify-bot:latest
     restart: unless-stopped
     env_file:

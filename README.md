@@ -85,6 +85,7 @@ Docker:
 
 ```bash
 cp .env.example .env   # fill in the vars you want, at minimum the two required ones
+export NODE_VERSION=$(cat version.txt)   # Node toolchain version, single source
 docker compose up -d --build
 ```
 
