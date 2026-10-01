@@ -1,0 +1,65 @@
+name: ci
+
+# Free-minute budget: run checks only after merge to main (push), not on every PR.
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: version.txt
+          cache: npm
+
+      - name: npm ci
+        run: npm ci
+
+      - name: npm test
+        run: npm test
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve Node toolchain
+        id: nodeversion
+        run: |
+          set -euo pipefail
+          NODE_VERSION="$(tr -d '[:space:]' < version.txt)"
+          if [ -z "$NODE_VERSION" ]; then
+            echo "::error::empty version.txt" >&2
+            exit 1
+          fi
+          echo "node_version=$NODE_VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Resolve build identity
+        id: build
+        run: |
+          set -euo pipefail
+          SHORT_SHA="$(git rev-parse --short=12 HEAD)"
+          if [ -n "${GITHUB_HEAD_REF:-}" ]; then
+            BRANCH_RAW="$GITHUB_HEAD_REF"
+          else
+            BRANCH_RAW="$GITHUB_REF_NAME"
+          fi
+          BRANCH="$(printf '%s' "$BRANCH_RAW" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]/-/g' | sed -E 's/-+/-/g' | sed -E 's/^-+|-+$//g')"
+          if [ -z "$BRANCH" ]; then
+            BRANCH=unknown
+          fi
+          BUILD_ID="${BRANCH}_${SHORT_SHA}"
+          echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Docker build
+        run: docker build --build-arg NODE_VERSION=${{ steps.nodeversion.outputs.node_version }} -t tg-notify-bot:ci-${{ steps.build.outputs.build_id }} .

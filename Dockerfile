@@ -6,8 +6,13 @@
 # Fully env-driven — no config files, no required host paths/volumes. State
 # persists at /app/data/state.json inside the container by default; it is
 # lost on container recreation, which is an accepted tradeoff.
+#
+# NODE_VERSION must match version.txt (CI and compose pass it):
+#   docker build --build-arg NODE_VERSION=$(tr -d '[:space:]' < version.txt) \
+#     -t denisitpro/tg-notify-bot:local .
 
-FROM node:26.3.1-alpine AS builder
+ARG NODE_VERSION
+FROM node:${NODE_VERSION}-alpine AS builder
 
 WORKDIR /app
 
@@ -20,7 +25,7 @@ RUN npm run build && npm prune --omit=dev
 
 # ---------------------------------------------------------------------------
 
-FROM node:26.3.1-alpine AS final
+FROM node:${NODE_VERSION}-alpine AS final
 
 WORKDIR /app
 
