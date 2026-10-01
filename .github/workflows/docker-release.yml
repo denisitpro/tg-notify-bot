@@ -1,0 +1,63 @@
+# Build & push the Telegram notify bot image to Docker Hub (denisitpro/tg-bot-kora).
+#
+# Required repo secrets (add these in GitHub → Settings → Secrets):
+#   DOCKERHUB_USERNAME  — Docker Hub account/username
+#   DOCKERHUB_TOKEN     — Docker Hub access token (not the password)
+#
+# Trigger: push ANY git tag → builds & pushes
+#   denisitpro/tg-bot-kora:<tag>  and  denisitpro/tg-bot-kora:latest
+# The tag name IS the image version (an optional leading `v` is stripped, e.g.
+# `v1.2.3` → `1.2.3`). Or run manually via workflow_dispatch with an explicit version.
+name: docker-release
+
+on:
+  push:
+    tags:
+      - "**"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Image version tag (e.g. 1.2.3)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            # Use the git tag as-is, stripping only an optional leading "v".
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: ${VERSION}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: |
+            denisitpro/tg-bot-kora:${{ steps.version.outputs.version }}
+            denisitpro/tg-bot-kora:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
