@@ -1,4 +1,4 @@
-// Preloaded (`node --import ./test/fake-rpc.mjs`) BEFORE the bot starts, so the stub
+// Preloaded (`bun --preload ./test/fake-rpc.mjs`) BEFORE the bot starts, so the stub
 // replaces `globalThis.fetch` before @solana/kit and the bot capture it.
 //
 // It makes an e2e run fully hermetic: every outbound call is answered locally.

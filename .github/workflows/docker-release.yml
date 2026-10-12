@@ -2,17 +2,24 @@ name: docker-build
 
 # Build & push the Telegram notify bot image to Docker Hub.
 # Each build publishes three tags (image name is set once in env.DOCKER_IMAGE):
-#   denisitpro/tg-notify-bot:TAG
-#   denisitpro/tg-notify-bot:TAG_SHORTSHA   (underscore — Docker forbids '+' in tags)
-#   denisitpro/tg-notify-bot:latest
+#   denisitpro/tg-notify-bot:X.Y.Z-SHA7   immutable (dash, never underscore)
+#   denisitpro/tg-notify-bot:X.Y.Z        mutable
+#   denisitpro/tg-notify-bot:latest       mutable
 #
-# Publish only from git tags (and optional workflow_dispatch).
-# TAG resolution:
-#   workflow_dispatch version input -> TAG (strip leading v)
-#   git tag refs/tags/*               -> tag name (strip leading v)
-# SHORTSHA = git rev-parse --short=12 HEAD (always).
+# Publish only from git tags (and workflow_dispatch).
+# X.Y.Z resolution (this workflow makes any tag name a valid Docker tag, or fails
+# loudly instead of failing at push time):
+#   workflow_dispatch version input / git tag name -> lowercased, leading "v" before
+#   a digit stripped (v1.2.3 -> 1.2.3), every run of characters outside [a-z0-9._-]
+#   replaced by "-", leading/trailing "." and "-" trimmed, then validated.
+# SHA7 = ${GITHUB_SHA::7}.
 #
-# Node version comes from version.txt.
+# Caches removed on purpose (rate-hub #268): builds run on free GitHub runners, releases
+# are rare so the hit rate is ~0 (GHA evicts entries unused for 7 days), and a stale or
+# poisoned cache is a risk for a release image. Do not re-add.
+# (docker/build-push-action below has no cache-from/cache-to; builds are from scratch.)
+#
+# Bun version comes from version.txt (passed as the BUN_VERSION build arg).
 # Required repo secrets: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN.
 
 on:
@@ -32,35 +39,48 @@ permissions:
 env:
   DOCKER_IMAGE: denisitpro/tg-notify-bot
 
+# Never cancel a publish half-way: a second tag queues behind the first.
+concurrency:
+  group: release-${{ github.workflow }}
+  cancel-in-progress: false
+
 jobs:
   docker:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 
       - name: Resolve version
         id: meta
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          SHORT_SHA="$(git rev-parse --short=12 HEAD)"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ inputs.version }}"
-            VERSION="${VERSION#v}"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            RAW="$INPUT_VERSION"
           elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            VERSION="${GITHUB_REF#refs/tags/}"
-            VERSION="${VERSION#v}"
+            RAW="${GITHUB_REF#refs/tags/}"
           else
             echo "::error::docker publish runs only on git tags or workflow_dispatch" >&2
             exit 1
           fi
-          NODE_VERSION="$(tr -d '[:space:]' < version.txt)"
-          if [ -z "$NODE_VERSION" ] || [ -z "$VERSION" ] || [ -z "$SHORT_SHA" ]; then
-            echo "::error::empty NODE_VERSION, image version, or SHORT_SHA" >&2
+          VERSION="$(printf '%s' "$RAW" | tr '[:upper:]' '[:lower:]')"
+          [[ "$VERSION" =~ ^v[0-9] ]] && VERSION="${VERSION#v}"   # v1.2.3 -> 1.2.3, but "very" stays
+          VERSION="$(printf '%s' "$VERSION" | sed -E 's/[^a-z0-9._-]+/-/g; s/^[.-]+//; s/[.-]+$//')"
+          # 120 leaves room for "-<sha7>" inside Docker's 128-char tag limit
+          printf '%s' "$VERSION" | grep -Eq '^[a-z0-9][a-z0-9._-]{0,119}$' || { echo "::error::cannot derive a Docker tag from '$RAW'" >&2; exit 1; }
+          BUN_VERSION="$(tr -d '[:space:]' < version.txt)"
+          if [ -z "$SHORT_SHA" ] || [ -z "$BUN_VERSION" ]; then
+            echo "::error::empty SHORT_SHA or BUN_VERSION (version.txt)" >&2
             exit 1
           fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
-          echo "node_version=$NODE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "bun_version=$BUN_VERSION" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "version_immutable=${VERSION}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v4
 
@@ -73,11 +93,11 @@ jobs:
         with:
           context: .
           push: true
+          platforms: linux/amd64
           build-args: |
-            NODE_VERSION=${{ steps.meta.outputs.node_version }}
+            BUN_VERSION=${{ steps.meta.outputs.bun_version }}
+          # No cache-from/cache-to type=gha here on purpose, see the header comment.
           tags: |
+            ${{ env.DOCKER_IMAGE }}:${{ steps.meta.outputs.version_immutable }}
             ${{ env.DOCKER_IMAGE }}:${{ steps.meta.outputs.version }}
-            ${{ env.DOCKER_IMAGE }}:${{ steps.meta.outputs.version }}_${{ steps.meta.outputs.short_sha }}
             ${{ env.DOCKER_IMAGE }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max

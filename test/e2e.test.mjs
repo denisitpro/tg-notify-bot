@@ -1,24 +1,27 @@
-// End-to-end tests: the REAL built bot (dist/index.js) is spawned as a child process
+// End-to-end tests: the REAL bot (src/index.ts) is spawned under Bun as a child process
 // with a preloaded stub (test/fake-rpc.mjs) that answers Solana RPC and swallows
 // Telegram. Nothing here talks to the network, and no bot code is mocked out — each
 // test drives the whole path env -> RPC -> state -> rendered Telegram message.
 //
-// Run with `npm test` (builds first). Requires no extra dependencies: node:test only.
+// Run with `bun test`. Requires no extra dependencies: bun:test only.
 
-import { test } from 'node:test';
+import { test, setDefaultTimeout } from 'bun:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { getBase58Decoder } from '@solana/kit';
+
+// runBot() allows up to 10 s per scenario; bun's default per-test timeout is 5 s.
+setDefaultTimeout(15_000);
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url));
 const BOT_ROOT = dirname(TEST_DIR);
-const ENTRY = join(BOT_ROOT, 'dist', 'index.js');
-const PRELOAD = pathToFileURL(join(TEST_DIR, 'fake-rpc.mjs')).href;
+const ENTRY = join(BOT_ROOT, 'src', 'index.ts');
+const PRELOAD = join(TEST_DIR, 'fake-rpc.mjs');
 
 // Real mainnet/devnet addresses from docs/ — they must be valid base58 pubkeys,
 // because the bot runs them through @solana/kit's `address()` assertion.
@@ -40,7 +43,7 @@ function sig(s, blockTime = 1_750_000_000, err = null) {
 }
 
 /**
- * Spawn the built bot with a scripted RPC scenario and collect its Telegram messages.
+ * Spawn the bot under Bun with a scripted RPC scenario and collect its Telegram messages.
  * Resolves as soon as `expectMessages` have been sent (then kills the bot), or when
  * the bot exits on its own, or on timeout.
  */
@@ -51,10 +54,10 @@ async function runBot({ scenario, env = {}, expectMessages = 1, timeoutMs = 10_0
 
   const child = spawn(
     process.execPath,
-    ['--import', PRELOAD, ENTRY],
+    ['--preload', PRELOAD, ENTRY],
     {
-      // cwd is the temp dir so a developer's real monitor-bot/.env can never leak in
-      // (the bot loads dotenv from the current working directory).
+      // cwd is the temp dir so a developer's real .env can never leak in
+      // (Bun auto-loads .env from the current working directory).
       cwd: dir,
       env: {
         PATH: process.env.PATH,
