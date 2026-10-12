@@ -16,7 +16,7 @@ separate pings on bursts (hundreds of fee tx per minute).
 
 **Visuals**: 🟢 <b>MAINNET</b> vs 🧪 <b>DEVNET</b> badges for instant cluster recognition.
 
-Requires **Node 26+**. Built on `@solana/kit` (the current official Solana JS SDK).
+Requires **Bun 1.4+**. Built on `@solana/kit` (the current official Solana JS SDK).
 
 Fully env-var driven — no config files, no required host paths/volumes. Balance
 handling:
@@ -72,20 +72,21 @@ Treasury vars = native SOL. All fee tokens (USDC, USDT, others) go through the
 
 ## Run
 
-Local (Node 26+):
+Local (Bun 1.4+; Bun runs `src/index.ts` directly and loads `.env` itself):
 
 ```bash
 cp .env.example .env   # fill in TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID
-npm install
-npm run dev            # tsx watch, hot reload
-# or: npm run build && npm start
+bun install
+bun run dev            # bun --watch, hot reload
+# or: bun start
+bun run typecheck      # tsc --noEmit
 ```
 
 Docker:
 
 ```bash
 cp .env.example .env   # fill in the vars you want, at minimum the two required ones
-export NODE_VERSION=$(cat version.txt)   # Node toolchain version, single source
+export BUN_VERSION=$(cat version.txt)   # Bun toolchain version, single source
 docker compose up -d --build
 ```
 
@@ -96,11 +97,12 @@ recreation; that's an accepted tradeoff, not a bug.
 ## Tests
 
 ```bash
-npm test        # builds, then runs the e2e suite (node:test, ~3s, no network)
+bun test        # e2e suite (bun:test, ~3s, no network)
 ```
 
-`test/e2e.test.mjs` spawns the **real built bot** (`dist/index.js`) as a child process
-with `test/fake-rpc.mjs` preloaded. That stub replaces `globalThis.fetch` before the bot
+`test/e2e.test.mjs` spawns the **real bot** (`src/index.ts`) under Bun
+(`bun --preload test/fake-rpc.mjs src/index.ts`) as a child process, in a temp working
+directory so a developer's `.env` never leaks in. The preloaded stub replaces `globalThis.fetch` before the bot
 starts, so every Solana RPC call is answered from a scripted scenario and every Telegram
 message is captured instead of sent — the run is hermetic (any unexpected outbound
 request throws) and nothing inside the bot is mocked out. Each test drives the whole
@@ -115,6 +117,12 @@ history, and the empty-config exit.
 Scenarios are plain JSON: per address, per RPC method, a list of responses consumed one
 per call (the last entry repeats). Note the call order for a treasury — the startup
 summary fetches the balance *before* the first poll does.
+
+## Release
+
+Push a bare semver git tag (e.g. `0.2.0`); the `docker-release` workflow publishes
+`denisitpro/tg-notify-bot:X.Y.Z-<sha7>` (immutable), `:X.Y.Z` and `:latest`. The Bun
+version baked into the image comes from `version.txt`.
 
 ## Getting your `TELEGRAM_CHAT_ID`
 

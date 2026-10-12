@@ -9,3 +9,4 @@ README.md
 docker-compose*.yml
 *.remote.env
 test
+.claude

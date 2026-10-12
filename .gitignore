@@ -12,3 +12,4 @@ data/
 # Keep the example env template in git (must come AFTER the .env.* rule above,
 # otherwise .env.* would re-ignore it — later patterns win within a file).
 !.env.example
+.claude/worktrees/
